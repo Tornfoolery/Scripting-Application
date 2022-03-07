@@ -1,0 +1,302 @@
+local hitboxModule = {}
+hitboxModule.__index = hitboxModule
+
+local hitboxFunctions = {}
+
+local folder = game.Workspace:FindFirstChild("Hitboxes") 
+
+if not folder then
+	folder = Instance.new("Folder")
+	folder.Parent = game.Workspace
+	folder.Name = "Hitboxes"
+end
+
+local function checkForValueInTable(v, t)
+	for i in pairs(t) do
+		if t[i] == v then
+			return true, i
+		end
+	end
+
+	return false
+end
+
+local function findKeyInTable(tab, val)
+	for key, value in next, tab do
+		if (value == val) then
+			return key
+		end
+	end
+end
+
+local function getCharacter(descendant)
+	local char = descendant:FindFirstAncestorWhichIsA("Model")
+	if char then
+		local humanoid = char:FindFirstChildOfClass("Humanoid")
+		if humanoid then
+			return char, humanoid
+		else
+			return false
+		end
+	else
+		return false
+	end
+end
+
+local function combineTable(t1, t2)
+	local t3 = {}
+	for i, v in pairs(t1) do
+		t3[i] = v
+	end
+	for i, v in pairs(t2) do
+		t3[i] = v
+	end
+
+	return t3
+end
+
+local function newIndex(Table, key, value)
+	local hitboxes = Table.Hitboxes
+	
+	if key == "Debug" then
+		for i,hitbox in pairs(hitboxes) do
+			if value == true then
+				hitbox.Transparency = 0.5
+			else
+				hitbox.Transparency = 1
+			end
+		end
+	end
+end
+
+local function newTable(Table)
+	local proxy = newproxy(true); local meta = getmetatable(proxy)
+	
+	meta.__call = function(_, action)
+		if action == "Table" then
+			return Table
+		end
+	end
+	meta.__index = function(_, key)
+		return Table[key]
+	end
+	meta.__newindex = function(_, key, value)
+		newIndex(Table, key, value)
+		Table[key] = value
+	end
+	meta.__len = function()
+		return #Table
+	end
+	return proxy
+end
+
+local function newObject(hitboxes)
+	local defaultParams = OverlapParams.new()
+	defaultParams.FilterDescendantsInstances = hitboxes
+	defaultParams.FilterType = Enum.RaycastFilterType.Blacklist
+	
+	local info = {
+		["Hitboxes"] = hitboxes,
+		["OverlapParams"] = defaultParams,
+		["MaxParts"] = math.huge,
+		["Folder"] = folder,
+		["Debug"] = false
+	}
+
+	local t = combineTable(info, hitboxFunctions)
+	local object = newTable(t)
+	
+	return object
+end
+
+local instanceClasses = {
+	"Model",
+	"Folder",
+
+	"BasePart",
+	"Part",
+	"MeshPart",
+}
+
+local function setProperties(object, properties)
+	local objectTypeOf = typeof(object)
+
+	local function set(obj)
+		for i,v in pairs(properties) do
+			if obj[i] then
+				obj[i] = v
+				print(obj[i])
+			end
+		end
+	end
+
+	if objectTypeOf == "Instance" then
+		local instanceClass = object.ClassName
+		local inClasses, index = checkForValueInTable(instanceClass, instanceClasses)
+
+		if inClasses and (index >= 3) then
+			set(object)
+		else
+			for i,obj in pairs(object:GetDescendants()) do
+				set(obj)
+			end
+		end
+	elseif objectTypeOf == "table" then
+		for i,obj in pairs(object) do
+			set(obj)
+		end
+	end
+end
+
+local function hitboxNew(object, objectTypeOf)
+	local t = {}
+
+	local function tableHitbox(Table)
+		for i,ob in pairs(Table) do
+			local objectType = typeof(ob)
+			if (objectType == "Instance") then
+				local hitbox = ob:Clone()
+				hitbox.Anchored = true
+				hitbox.CanCollide = false
+				hitbox.Massless = true
+				hitbox.Transparency = 1
+				hitbox.Color = hitboxModule.color or Color3.fromRGB(255, 0, 0)
+				hitbox.Parent = folder or game.Workspace
+
+				table.insert(t, hitbox)
+			end
+		end
+	end
+
+	if objectTypeOf == "Instance" then
+		local instanceClass = object.ClassName
+		local inClasses, index = checkForValueInTable(instanceClass, instanceClasses)
+
+		if inClasses and (index >= 3) then
+			local hitbox = object:Clone()
+			hitbox.Anchored = true
+			hitbox.CanCollide = false
+			hitbox.Massless = true
+			hitbox.Transparency = 1
+			hitbox.Color = hitboxModule.color or Color3.fromRGB(255, 0, 0)
+			hitbox.Parent = folder or game.Workspace
+
+			table.insert(t, hitbox)
+		else
+			tableHitbox(object:GetDescendants())
+		end
+	else
+		tableHitbox()
+	end
+
+	return t
+end
+
+function hitboxFunctions:Initialize(action, arg)
+	if action == "SetProperty" then
+		setProperties(self, arg)
+	end
+end
+
+function hitboxModule.New(object)
+	local objectTypeOf = typeof(object)
+	if not(objectTypeOf == "table" or objectTypeOf == "Instance") then
+		error("The hitbox object must be a model, folder, basepart or table")
+	end
+
+	local hitboxes = hitboxNew(object, objectTypeOf)
+	
+	local hitbox = newObject(hitboxes)
+	
+	if hitbox then
+		return hitbox
+	end
+end
+
+function hitboxModule.Create(pos, size)
+	if not(typeof(pos) == "Vector3" and typeof(size) == "Vector3") then
+		error("The position and size argument must be a vector3")
+	end
+
+	local hitbox = {}
+
+	local h = Instance.new("Part")
+	h.Anchored = true
+	h.CanCollide = false
+	h.Massless = true
+	h.Transparency = 1
+	h.Color = hitboxModule.color or Color3.fromRGB(255, 0, 0)
+	h.Position = pos
+	h.Size = size
+	h.Parent = folder or game.Workspace
+
+	local hitbox = newObject({h})
+
+	return hitbox
+end
+
+function hitboxFunctions:Weld(weldPart)
+	local hitboxes = self.Hitboxes
+
+	for i,hitbox in pairs(hitboxes) do
+		local CJ = CFrame.new(hitbox.Position)
+
+		local motor6D = Instance.new("Motor6D")
+		motor6D.Name = "HitboxWeld"
+		motor6D.Part0 = weldPart
+		motor6D.Part1 = hitbox
+		motor6D.C0 = (weldPart.CFrame:inverse() * CJ) * CFrame.Angles(hitbox.CFrame:toEulerAnglesXYZ()) 
+		motor6D.C1 = (hitbox.CFrame:inverse() * CJ) * CFrame.Angles(hitbox.CFrame:toEulerAnglesXYZ())
+		motor6D.Parent = hitbox
+
+		hitbox.Anchored = false
+	end
+end
+
+function hitboxFunctions:GetCharacters()
+	local hitboxes = self.Hitboxes
+	local overlapParams = self.OverlapParams
+	local maxParts = self.MaxParts
+
+	local characters = {}	
+
+	local function check(object)
+		for i,v in pairs(characters) do
+			if object:IsDescendantOf(v) then
+				return false
+			end
+		end
+		return true
+	end
+
+	local function insertToTable(partsInHitbox)
+		for i, part in pairs(partsInHitbox) do
+			local char, ehum = getCharacter(part)
+
+			if char and (check(part)) then
+				if ehum.Health >= 1 then
+					table.insert(characters, char)
+				end
+			end
+		end
+	end
+
+	for i,hitbox in pairs(hitboxes) do
+		local partsInHitbox = game.Workspace:GetPartsInPart(hitbox, overlapParams, maxParts)
+		insertToTable(partsInHitbox)
+	end
+
+	return characters
+end
+
+function hitboxFunctions:Destroy()
+	local hitboxes = self.Hitboxes
+
+	for i,hitbox in pairs(hitboxes) do
+		hitbox:Destroy()
+	end
+
+	table.clear(self("Table"))
+end
+
+return hitboxModule
