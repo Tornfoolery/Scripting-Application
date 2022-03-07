@@ -1,0 +1,95 @@
+local plr = game:GetService("Players").LocalPlayer
+local mouse = plr:GetMouse()
+
+local camera = game:GetService("Workspace").CurrentCamera
+
+local UIS = game:GetService("UserInputService")
+
+local instancePart = Instance.new("Part")
+instancePart.Anchored = true
+instancePart.CanCollide = false
+instancePart.Size = Vector3.new(2.5, 2.5, 0.25)
+
+local decal = Instance.new("Texture")
+decal.Texture = "rbxassetid://8370832127"
+decal.StudsPerTileU = instancePart.Size.X
+decal.StudsPerTileV = instancePart.Size.Y
+decal.Parent = instancePart
+
+local DEBUG = Instance.new("Part")
+DEBUG.Anchored = true
+DEBUG.CanCollide = false
+DEBUG.Size = Vector3.new(0.3, 0.3, 0.3)
+
+local axes = {
+	"X",
+	"Y",
+} 
+
+function oppositeNumber(num)
+	if num < 0 then
+		return math.abs(num)
+	else
+		return math.abs(num)*-1
+	end
+end
+
+function raycastWalls(part, surface)
+	local raycastParams = RaycastParams.new()
+	raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+	raycastParams.FilterDescendantsInstances = workspace.Instances:GetDescendants()
+	
+	local function raycast(size, axis)
+		local cframe = CFrame.new(axis == "X" and size or 0, axis == "Y" and size or 0, -part.Size.Z)
+		local raycastCFrame = part.CFrame * cframe
+		
+		local Debug = DEBUG:Clone()
+		Debug.CFrame = raycastCFrame
+		Debug.Parent = game.Workspace.Instances
+		
+		local result = workspace:Raycast(part.Position, raycastCFrame.Position, raycastParams)
+		if result ~= nil then
+			local oppositePos = part.Position + Vector3.new(axis == "X" and size or 0, axis == "Y" and size or 0, -part.Size.Z)
+			local length = oppositePos[axis] - result.Position[axis]
+			
+			local newSize = Vector3.new(axis == "X" and part.Size.X - length or part.Size.X, axis == "Y" and part.Size.Y - size or part.Size.Y, part.Size.Z)
+			part.Size = newSize
+			part.Position = Vector3.new(axis == "X" and part.Position.X - (length/2) or part.Position.X, axis == "Y" and part.Position.Y - size or part.Position.Y, part.Position.Z)
+			
+			local texture = part:FindFirstChildOfClass("Texture")
+			if texture then
+				texture.Face = Enum.NormalId.Back
+				
+				local x = oppositeNumber(surface.X)
+				local y = oppositeNumber(surface.Y)
+				local z = oppositeNumber(surface.Z)
+				
+				part.CFrame = CFrame.new(part.Position, part.Position + Vector3.new(x,y,z))
+			end
+			
+			return true
+		end
+	end
+	
+	local continueNext = true
+	
+	for _, axis in pairs(axes) do if raycast(part.Size[axis]/2, axis) then continueNext = false break end end
+	for _, axis in pairs(axes) do if continueNext == false or raycast(-part.Size[axis]/2, axis) then break end end
+end
+
+UIS.InputBegan:Connect(function(Input)
+	if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+		local hit = mouse.Hit
+		local target = mouse.Target
+		
+		if hit ~= nil and target ~= nil then 
+			local surfaceObjectNormal = Vector3.FromNormalId(mouse.TargetSurface)
+			local surfaceWorldNormal = mouse.Target.CFrame:VectorToWorldSpace(surfaceObjectNormal)
+
+			local part = instancePart:Clone()
+			part.CFrame = CFrame.new(hit.Position, hit.Position + surfaceWorldNormal) -- set the part's position and rotate it
+			raycastWalls(part, surfaceWorldNormal) -- bend the decal around walls
+			part.Parent = game.Workspace.Instances
+		end
+	end
+end)
